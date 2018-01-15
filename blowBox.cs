@@ -29,7 +29,7 @@ public class blowBox : MonoBehaviour
         transform.position = new Vector3(transform.position.x, maxYpos, transform.position.z);
         transform.localScale = actBoxScale;
 
-        transform.GetChild(2).gameObject.SetActive(true);
+        transform.GetChild(0).gameObject.SetActive(true);
     }
 
     public void Bang( Material newMat )

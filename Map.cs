@@ -9,8 +9,6 @@ public class Map : MonoBehaviour
     public static int maxRows = 9;                                      // Rows
     public static bool isStart = false;
 
-    public Color levelColor;
-
     public Data[,] mTable = new Data[maxColumns, maxRows];              // Matrix that holds game map state
     public GameObject prefabBox;                                        // The box, and "add points" bubble prefabs
     public Demo demo;                                                   // BAsic game class;
@@ -28,7 +26,7 @@ public class Map : MonoBehaviour
 
         public int points = 0;                                          // Used in beamOn coroutine
         public int counter = 0;                                         // Bangs left
-        public bool status = true;                                      // Showes can it move or be activated
+        public bool status = false;                                     // Showes can it move or be activated
         public bool bonus = false;                                      // Bonus beam
 
         public Data(int x, int y)
@@ -38,20 +36,6 @@ public class Map : MonoBehaviour
         }
     }
 
-    public void LevelUp(Color color)
-    {
-
-        if (!isStart)
-        {
-            levelColor = color;
-
-            prefabBox.GetComponent<Renderer>().material.SetColor("_EmissionColor", color);
-
-            Setup();
-        }
-
-    }
-
     public void Setup()
     {
         if (isStart)
@@ -59,7 +43,7 @@ public class Map : MonoBehaviour
         else
             isStart = true;
 
-        demo.DropNull();
+        Demo.noMove = false;
 
 //      Generating coordinates of bonuses
 
@@ -108,6 +92,7 @@ public class Map : MonoBehaviour
         demo.mainUI.UpdateBeamsCounter();
 
         isStart = false;
+        StartCoroutine(TurnItOn());
     }
 
     public void AddPoints(int x, int y, int points)
@@ -130,7 +115,6 @@ public class Map : MonoBehaviour
                         if (mTable[n, m].bonus && mTable[n, m].status && (n != x || m != y) )
                         {
                             AddPoints(n, m, points);
-                            Debug.Log("second bonus");
                         }
 
                         mTable[n, m].points = points;
@@ -149,16 +133,77 @@ public class Map : MonoBehaviour
 
         RaycastHit hitInfo = new RaycastHit();
         Physics.Raycast(ray, out hitInfo, Mathf.Infinity);
-        if (hitInfo.collider.gameObject.tag == "box")
-        {
-            x = hitInfo.collider.gameObject.GetComponent<blowBox>().coordinates.x;
-            y = hitInfo.collider.gameObject.GetComponent<blowBox>().coordinates.y;
 
-            return true;
-        }
+        if (Physics.Raycast(ray, out hitInfo, Mathf.Infinity) && hitInfo.collider != null)
+            if (hitInfo.collider.gameObject.tag == "Box")
+            {
+                x = hitInfo.collider.gameObject.GetComponent<blowBox>().coordinates.x;
+                y = hitInfo.collider.gameObject.GetComponent<blowBox>().coordinates.y;
+
+                return true;
+            }
 
         x = y = 0;
         return false;
     }
+
+    void Update()
+    {
+        int check = 0;
+
+        for (int c = 0; c < maxColumns; c++)
+        {
+            for (int r = 0; r < maxRows; r++)
+            {
+                if (mTable[c, r].iBox.transform.position.y >= mTable[c, r].dYmax) mTable[c, r].dest = -1.0f * mTable[c, r].dYmax;
+                else if (mTable[c, r].iBox.transform.position.y <= 0.0f) mTable[c, r].dest = mTable[c, r].dYmax;
+
+                if (mTable[c, r].status)
+                {
+                    int sign = mTable[c, r].dYmax > mTable[c, r].dest ? -1 : 1;
+                    mTable[c, r].iBox.transform.Translate(0, sign * Time.deltaTime * mTable[c, r].speed * 0.5f * Demo.generalSpeed, 0);
+
+                    check++;
+                }
+            }
+        }
+
+        if (check == 0 && !Demo.noMove)
+            Demo.noMove = true;
+    }
+
+    private IEnumerator TurnItOn()
+    {
+        Demo.noAction = false;
+
+        for (int c = 0; c < maxColumns; c++)
+        {
+            for (int r = 0; r < maxRows; r++)
+            {
+                mTable[c, r].iBox.GetComponent<Renderer>().material = deaMaterial;
+            }
+        }
+
+        int counter = 0;
+        while (counter < maxColumns * maxRows)
+        {
+            for (int c = 0; c < maxColumns; c++)
+            {
+                for (int r = 0; r < maxRows; r++)
+                {
+                    if (Random.value < 0.1f && !mTable[c, r].status)
+                    {
+                        mTable[c, r].iBox.GetComponent<Renderer>().material = activeMaterial1;
+                        mTable[c, r].status = true;
+                        counter++;
+                        yield return new WaitForSeconds(0.001f);
+                    }
+                }
+            }
+        }
+
+        Demo.noAction = true;
+    }
+
 
 }

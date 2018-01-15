@@ -5,29 +5,65 @@ using UnityEngine.UI;
 
 public class Demo : MonoBehaviour {
 
-    const float basicSpeed = 0.5f;
+    const int levelCap = 3;
     const int startBeams = 5;
+    const int startBonuses = 3;
+    const float startSpeed = 0.5f;
 
-    public static int Score = 0;                                        // Current game session score
+    public Color[] palette;                                             // Default color sсheme
+
+    public static int score = 0;                                        // Current game session score
+    public static int levelScore = 0;                                   // Current level score
     public static int beamsCount;                                       // Beams left for this session
     public static int maxBonuses;                                       // Maximum boxes with bonus beams
     public static float generalSpeed;                                   // General game speed
 
-    public static bool isBeamOff = true;                                // beamOn coroutine condition
-    public static bool isStart = true;                                  // 
+    public static bool noAction = true;                                 // beamOn coroutine condition
+    public static bool noMove = false;
+    public static byte level = 0;                                       // Current level
 
     public Map map;                                                     // Actual playground
     public UI mainUI;                                                   // Main user interface
     public Beam beam;                                                   // The Beam
 
+    private int[] levelGoal = { 5000, 5000, 5000, 6000 };
+    private float levelSpeed = 0.5f;
+
     public void DropNull()
     {
-        Score = 0;
-        generalSpeed = basicSpeed;
+        level = 0;
+        score = levelScore = 0;
+        generalSpeed = levelSpeed = startSpeed;
         beamsCount = startBeams;
-        isBeamOff = true;
+        maxBonuses = startBonuses;
 
         mainUI.SetProgressToStart();
+        mainUI.SetColor(palette[0]);
+    }
+
+    public void LevelUp()
+    {
+        if (level == levelCap)
+        {
+//          Game Over
+            mainUI.UpdateScore("-U WIN-");
+            return;
+        }
+
+        levelScore = 0;
+
+        level++;
+        maxBonuses++;
+        generalSpeed = levelSpeed += 0.25f;
+        beamsCount = startBeams - level;
+
+        if(level == levelCap)
+            mainUI.SetColor(palette[levelCap], palette[0]);
+        else
+            mainUI.SetColor(palette[level]);
+
+        mainUI.SetProgressToStart();
+        map.Setup();
     }
 
     void Start ()
@@ -36,12 +72,10 @@ public class Demo : MonoBehaviour {
         Screen.autorotateToLandscapeLeft = Screen.autorotateToLandscapeRight = Screen.autorotateToPortraitUpsideDown = false;
         Screen.orientation = ScreenOrientation.Portrait;
 
-        generalSpeed = basicSpeed;
-        beamsCount = startBeams;
+        maxBonuses = startBonuses;
+        UI.isMenuOn = false;
 
-        maxBonuses = 3;
-
-        mainUI.SetProgressToStart();
+        DropNull();
         map.Setup();
     }
 
@@ -49,58 +83,62 @@ public class Demo : MonoBehaviour {
     {
         if (Input.touchCount > 0)
         {
-            if (Input.GetTouch(0).phase == TouchPhase.Began && isBeamOff)
+            if (Input.GetTouch(0).phase == TouchPhase.Began && noAction)
             {
-                UserActionStart(Input.GetTouch(0).position);
+                noAction = false;
+
+                if (UI.isMenuOn)
+                {
+                    mainUI.Reaction(Input.GetTouch(0).position);
+                }
+                else
+                {
+                    UserActionStart(Input.GetTouch(0).position);
+                }
             }
 
             if (Input.GetTouch(0).phase == TouchPhase.Ended || Input.GetTouch(0).phase == TouchPhase.Canceled)
             {
-                if (isBeamOff)
-                    UserActionStop();
+                if (UI.isMenuOn)
+                {
+
+                }
                 else
-                    StartCoroutine(BeamOff());
+                {
+                    if (noAction)
+                        UserActionStop();
+                    else
+                        StartCoroutine(BeamOff());
+                }
             }
         }
 
-        if (Input.GetMouseButtonDown(0) && isBeamOff)
+        if (Input.GetMouseButtonDown(0) && noAction)
         {
-            UserActionStart(Input.mousePosition);
+            if (UI.isMenuOn)
+            {
+                mainUI.Reaction(Input.mousePosition);
+            }
+            else
+                UserActionStart(Input.mousePosition);
         }
 
         else if (Input.GetMouseButtonUp(0))
         {
-            if (isBeamOff)
+            if (noAction && !UI.isMenuOn)
                 UserActionStop();
             else
                 StartCoroutine(BeamOff());
         }
 
-        for (int c = 0; c < Map.maxColumns; c++)
-        {
-            for (int r = 0; r < Map.maxRows; r++)
-            {
-                if (map.mTable[c, r].iBox.transform.position.y >= map.mTable[c, r].dYmax) map.mTable[c, r].dest = -1.0f * map.mTable[c, r].dYmax;
-                else if (map.mTable[c, r].iBox.transform.position.y <= 0.0f) map.mTable[c, r].dest = map.mTable[c, r].dYmax;
-
-                if (map.mTable[c, r].status)
-                {
-                    int sign = map.mTable[c, r].dYmax > map.mTable[c, r].dest ? -1 : 1;
-                    map.mTable[c, r].iBox.transform.Translate(0, sign * Time.deltaTime * map.mTable[c, r].speed * 0.5f * generalSpeed, 0);
-                }
-            }
-        }
     }
 
 //  Undefined user interaction, mouse click or touch, starts here
 
-    public void UserActionStart(Vector3 point)
-    {
-        UserActionStart(new Vector2(point.x, point.y));
-    }
-
     public void UserActionStart(Vector2 point)
     {
+        noAction = false;
+
         int x = Mathf.CeilToInt(point.x / (Screen.width / Map.maxColumns)) - 1;
         int y = Mathf.CeilToInt(point.y / (Screen.height / (Map.maxRows + 1))) - 1;
 
@@ -108,14 +146,19 @@ public class Demo : MonoBehaviour {
 
         if (y <= 1)
         {
-            Debug.Log("BUTTON");
-//          if (x <= 2) map.Setup();
             if (x <= 2)
             {
-                map.Setup();
+                mainUI.ActivateMenu();
             }
 
-            if (x > 6) FPSDisplay.active = !FPSDisplay.active;
+/*          else if (x > 6)
+            {
+                LevelUp();
+                FPSDisplay.active = !FPSDisplay.active;
+                noAction = true;
+            }
+*/
+            else noAction = true;
         }
 
         else if (beamsCount > 0 && map.HitLocation(point, out x, out y))
@@ -150,21 +193,23 @@ public class Demo : MonoBehaviour {
 
             if (x < Map.maxColumns && x >= 0 && y >= 0 && y < Map.maxRows)
             {
-//              The beam is on
-                isBeamOff = false;
                 StartCoroutine(BeamOn(new Vector2Int(x, y)));
             }
         }
+        else
+        {
+            noAction = true;
+        }
     }
 
-//  Stop user interaction
+    //  Stop user interaction
 
     public void UserActionStop()
     {
-        isBeamOff = false;
+        noAction = false;
 
         StopAllCoroutines();
-        generalSpeed = basicSpeed;
+        generalSpeed = levelSpeed;
 
         for (int c = 0; c < Map.maxColumns; c++)
         {
@@ -202,11 +247,18 @@ public class Demo : MonoBehaviour {
         mainUI.UpdateBeamsCounter();
 
         beam.TurnOff();
-        isBeamOff = true;
+        noAction = true;
+
+        if (levelScore >= levelGoal[level] && (beamsCount == 0 || noMove) )
+        {
+            LevelUp();
+        }
     }
 
     private IEnumerator BeamOn(Vector2Int point)
     {
+        noAction = false;
+
         int hitScore = 0;
         Quaternion q = new Quaternion(1.0f, 1.0f, 1.0f, 1.0f);
 
@@ -223,7 +275,8 @@ public class Demo : MonoBehaviour {
                             int boxScore = Mathf.RoundToInt(map.mTable[c, r].iBox.transform.position.y / map.mTable[c, r].dYmax * 100.0f);
                             boxScore = boxScore > 100 ? 100 : boxScore;
 
-                            Score += boxScore;
+                            score += boxScore;
+                            levelScore += boxScore;
                             hitScore += boxScore;
 
                             if (map.mTable[c, r].bonus)
@@ -252,23 +305,21 @@ public class Demo : MonoBehaviour {
             beam.TurnOn(point, q);
 
             mainUI.UpdateScore("+ " + hitScore);
-            mainUI.UpdateProgress();
+            mainUI.UpdateProgress(levelGoal[level]);
 
             generalSpeed = Mathf.Lerp(generalSpeed, 0.0f, 0.1f * (i - 5));
-            yield return new WaitForSeconds(0.1f * generalSpeed);
+            yield return new WaitForSeconds(0.04f * generalSpeed);
         }
 
-        isBeamOff = true;
+        noAction = true;
 
-/*      if (Score >= 5000)
-            envBox.envStatus = false;*/
     }
 
     private  IEnumerator BeamOff()
     {
         Debug.Log("Attention!!");
 
-        while (!isBeamOff)
+        while (!noAction)
             yield return new WaitForSeconds(0.1f * generalSpeed);
         UserActionStop();
     }
